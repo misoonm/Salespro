@@ -14,34 +14,58 @@ const SUPPLIERS = {
     
     setupEventHandlers: function() {
         // البحث عن الموردين
-        document.getElementById('supplier-search').addEventListener('input', 
-            UTILS.debounce(this.searchSuppliers.bind(this), 300)
-        );
+        const searchInput = document.getElementById('supplier-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', 
+                UTILS.debounce(this.searchSuppliers.bind(this), 300)
+            );
+        }
         
         // إضافة مورد جديد
-        document.getElementById('save-supplier-btn').addEventListener('click', this.saveSupplier.bind(this));
+        const saveBtn = document.getElementById('save-supplier-btn');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', this.saveSupplier.bind(this));
+        }
         
         // تصفية الموردين
-        document.getElementById('supplier-filter').addEventListener('change', (e) => {
-            this.currentFilter = e.target.value;
-            this.loadSuppliers();
-        });
+        const filterSelect = document.getElementById('supplier-filter');
+        if (filterSelect) {
+            filterSelect.addEventListener('change', (e) => {
+                this.currentFilter = e.target.value;
+                this.loadSuppliers();
+            });
+        }
         
         // استيراد الموردين
-        document.getElementById('import-suppliers-btn').addEventListener('click', this.importSuppliers.bind(this));
+        const importBtn = document.getElementById('import-suppliers-btn');
+        if (importBtn) {
+            importBtn.addEventListener('click', this.importSuppliers.bind(this));
+        }
         
         // تصدير الموردين
-        document.getElementById('export-suppliers-btn').addEventListener('click', this.exportSuppliers.bind(this));
+        const exportBtn = document.getElementById('export-suppliers-btn');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', this.exportSuppliers.bind(this));
+        }
         
         // تحديث القائمة
-        document.getElementById('refresh-suppliers-btn').addEventListener('click', () => {
-            this.loadSuppliers();
-            UTILS.showNotification('تم تحديث قائمة الموردين', 'success');
-        });
+        const refreshBtn = document.getElementById('refresh-suppliers-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => {
+                this.loadSuppliers();
+                UTILS.showNotification('تم تحديث قائمة الموردين', 'success');
+            });
+        }
+        
+        // تحديث المورد
+        const updateBtn = document.getElementById('update-supplier-btn');
+        if (updateBtn) {
+            updateBtn.addEventListener('click', this.updateSupplier.bind(this));
+        }
     },
     
     loadSuppliers: function() {
-        let suppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS);
+        let suppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS) || [];
         
         // التصفية
         suppliers = this.filterSuppliers(suppliers);
@@ -80,7 +104,7 @@ const SUPPLIERS = {
     
     searchSuppliersData: function(suppliers, searchTerm) {
         return suppliers.filter(supplier => 
-            supplier.name.toLowerCase().includes(searchTerm) || 
+            (supplier.name && supplier.name.toLowerCase().includes(searchTerm)) || 
             (supplier.contact && supplier.contact.toLowerCase().includes(searchTerm)) ||
             (supplier.phone && supplier.phone.includes(searchTerm)) ||
             (supplier.email && supplier.email.toLowerCase().includes(searchTerm)) ||
@@ -90,8 +114,8 @@ const SUPPLIERS = {
     
     sortSuppliersData: function(suppliers, field, direction = 'asc') {
         return suppliers.sort((a, b) => {
-            let valueA = a[field];
-            let valueB = b[field];
+            let valueA = a[field] || '';
+            let valueB = b[field] || '';
             
             if (typeof valueA === 'string') {
                 valueA = valueA.toLowerCase();
@@ -106,6 +130,8 @@ const SUPPLIERS = {
     
     renderSuppliersTable: function(suppliers) {
         const tableBody = document.querySelector('#suppliers-table tbody');
+        if (!tableBody) return;
+        
         tableBody.innerHTML = '';
         
         if (suppliers.length === 0) {
@@ -145,7 +171,7 @@ const SUPPLIERS = {
                             <a href="tel:${supplier.phone}" class="text-decoration-none">${supplier.phone}</a>
                         </div>
                     ` : '-'}
-                    ${supplier.phone2 ? `<small class="text-muted">${supplier.phone2}</small>` : ''}
+                    ${supplier.phone2 ? `<small class="text-muted d-block">${supplier.phone2}</small>` : ''}
                 </td>
                 <td>
                     ${supplier.email ? `
@@ -319,7 +345,7 @@ const SUPPLIERS = {
     },
     
     updateSupplierStats: function(filteredSuppliers) {
-        const allSuppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS);
+        const allSuppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS) || [];
         
         const statsElement = document.getElementById('suppliers-stats');
         if (statsElement) {
@@ -365,9 +391,12 @@ const SUPPLIERS = {
     },
     
     searchSuppliers: function() {
-        this.searchTerm = document.getElementById('supplier-search').value.toLowerCase();
-        this.currentPage = 1;
-        this.loadSuppliers();
+        const searchInput = document.getElementById('supplier-search');
+        if (searchInput) {
+            this.searchTerm = searchInput.value.toLowerCase();
+            this.currentPage = 1;
+            this.loadSuppliers();
+        }
     },
     
     saveSupplier: function() {
@@ -379,6 +408,7 @@ const SUPPLIERS = {
         
         const newSupplier = {
             ...formData,
+            id: Date.now().toString(), // إضافة ID فريد
             isActive: true,
             balance: 0,
             createdAt: new Date().toISOString(),
@@ -389,8 +419,14 @@ const SUPPLIERS = {
         
         if (savedSupplier) {
             // إغلاق النموذج
-            bootstrap.Modal.getInstance(document.getElementById('addSupplierModal')).hide();
-            document.getElementById('add-supplier-form').reset();
+            const modalElement = document.getElementById('addSupplierModal');
+            if (modalElement) {
+                const modal = bootstrap.Modal.getInstance(modalElement);
+                if (modal) modal.hide();
+            }
+            
+            const formElement = document.getElementById('add-supplier-form');
+            if (formElement) formElement.reset();
             
             UTILS.showNotification('تم إضافة المورد بنجاح', 'success');
             
@@ -437,7 +473,7 @@ const SUPPLIERS = {
     },
     
     editSupplier: function(supplierId) {
-        const suppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS);
+        const suppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS) || [];
         const supplier = suppliers.find(s => s.id === supplierId);
         
         if (!supplier) {
@@ -447,7 +483,7 @@ const SUPPLIERS = {
         
         // تعبئة النموذج
         document.getElementById('editSupplierId').value = supplier.id;
-        document.getElementById('editSupplierName').value = supplier.name;
+        document.getElementById('editSupplierName').value = supplier.name || '';
         document.getElementById('editSupplierType').value = supplier.type || '';
         document.getElementById('editSupplierContact').value = supplier.contact || '';
         document.getElementById('editSupplierPosition').value = supplier.position || '';
@@ -462,8 +498,11 @@ const SUPPLIERS = {
         document.getElementById('editSupplierPaymentTerms').value = supplier.paymentTerms || '';
         
         // فتح النموذج
-        const editModal = new bootstrap.Modal(document.getElementById('editSupplierModal'));
-        editModal.show();
+        const editModalElement = document.getElementById('editSupplierModal');
+        if (editModalElement) {
+            const editModal = new bootstrap.Modal(editModalElement);
+            editModal.show();
+        }
     },
     
     updateSupplier: function() {
@@ -482,7 +521,12 @@ const SUPPLIERS = {
         const updatedSupplier = DB.update(CONSTANTS.STORAGE_KEYS.SUPPLIERS, supplierId, updates);
         
         if (updatedSupplier) {
-            bootstrap.Modal.getInstance(document.getElementById('editSupplierModal')).hide();
+            const modalElement = document.getElementById('editSupplierModal');
+            if (modalElement) {
+                const modal = bootstrap.Modal.getInstance(modalElement);
+                if (modal) modal.hide();
+            }
+            
             UTILS.showNotification('تم تحديث المورد بنجاح', 'success');
             
             this.loadSuppliers();
@@ -511,7 +555,7 @@ const SUPPLIERS = {
     },
     
     viewSupplier: function(supplierId) {
-        const suppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS);
+        const suppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS) || [];
         const supplier = suppliers.find(s => s.id === supplierId);
         
         if (!supplier) {
@@ -658,7 +702,7 @@ const SUPPLIERS = {
     },
     
     toggleSupplierStatus: function(supplierId) {
-        const suppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS);
+        const suppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS) || [];
         const supplierIndex = suppliers.findIndex(s => s.id === supplierId);
         
         if (supplierIndex === -1) {
@@ -682,7 +726,7 @@ const SUPPLIERS = {
         }
         
         // التحقق من وجود المورد في المشتريات
-        const purchases = DB.get(CONSTANTS.STORAGE_KEYS.PURCHASES);
+        const purchases = DB.get(CONSTANTS.STORAGE_KEYS.PURCHASES) || [];
         const supplierInPurchases = purchases.some(purchase => purchase.supplierId === supplierId);
         
         if (supplierInPurchases) {
@@ -710,14 +754,16 @@ const SUPPLIERS = {
     },
     
     loadPurchases: function() {
-        const purchases = DB.get(CONSTANTS.STORAGE_KEYS.PURCHASES);
-        const suppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS);
+        const purchases = DB.get(CONSTANTS.STORAGE_KEYS.PURCHASES) || [];
+        const suppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS) || [];
         
         this.renderPurchasesTable(purchases, suppliers);
     },
     
     renderPurchasesTable: function(purchases, suppliers) {
         const tableBody = document.querySelector('#purchases-table tbody');
+        if (!tableBody) return;
+        
         tableBody.innerHTML = '';
         
         if (purchases.length === 0) {
@@ -769,7 +815,7 @@ const SUPPLIERS = {
     },
     
     viewPurchase: function(invoiceNumber) {
-        const purchases = DB.get(CONSTANTS.STORAGE_KEYS.PURCHASES);
+        const purchases = DB.get(CONSTANTS.STORAGE_KEYS.PURCHASES) || [];
         const purchase = purchases.find(p => p.invoiceNumber === invoiceNumber);
         
         if (!purchase) {
@@ -777,7 +823,7 @@ const SUPPLIERS = {
             return;
         }
         
-        const suppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS);
+        const suppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS) || [];
         const supplier = suppliers.find(s => s.id === purchase.supplierId);
         
         this.showPurchaseDetailsModal(purchase, supplier);
@@ -859,7 +905,7 @@ const SUPPLIERS = {
     },
     
     exportSuppliers: function() {
-        const suppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS);
+        const suppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS) || [];
         const exportData = suppliers.map(supplier => ({
             name: supplier.name,
             type: supplier.type,
@@ -892,7 +938,7 @@ const SUPPLIERS = {
     
     // دالة للحصول على مورد بالاسم
     getSupplierByName: function(name) {
-        const suppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS);
+        const suppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS) || [];
         return suppliers.find(supplier => 
             supplier.name.toLowerCase() === name.toLowerCase() && supplier.isActive !== false
         );
@@ -900,7 +946,7 @@ const SUPPLIERS = {
     
     // دالة لتحديث رصيد المورد
     updateSupplierBalance: function(supplierId, amount) {
-        const suppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS);
+        const suppliers = DB.get(CONSTANTS.STORAGE_KEYS.SUPPLIERS) || [];
         const supplierIndex = suppliers.findIndex(s => s.id === supplierId);
         
         if (supplierIndex === -1) return false;
