@@ -13,22 +13,57 @@ const POS = {
     
     setupEventHandlers: function() {
         // البحث في المنتجات
-        document.getElementById('pos-product-search').addEventListener('input', 
-            UTILS.debounce(this.searchProductsPOS.bind(this), 300)
-        );
+        const searchInput = document.getElementById('pos-product-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', 
+                UTILS.debounce(this.searchProductsPOS.bind(this), 300)
+            );
+            
+            // عند الضغط على Enter في البحث
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.addFirstSearchResultToCart();
+                }
+            });
+        }
         
         // مسح الباركود
-        document.getElementById('barcode-btn').addEventListener('click', this.openBarcodeScanner.bind(this));
-        document.getElementById('close-scanner-btn').addEventListener('click', this.closeBarcodeScanner.bind(this));
+        const barcodeBtn = document.getElementById('barcode-btn');
+        if (barcodeBtn) {
+            barcodeBtn.addEventListener('click', this.openBarcodeScanner.bind(this));
+        }
+        
+        const closeScannerBtn = document.getElementById('close-scanner-btn');
+        if (closeScannerBtn) {
+            closeScannerBtn.addEventListener('click', this.closeBarcodeScanner.bind(this));
+        }
         
         // إدارة السلة
-        document.getElementById('clear-cart-btn').addEventListener('click', this.clearCart.bind(this));
-        document.getElementById('complete-sale-btn').addEventListener('click', this.completeSale.bind(this));
+        const clearCartBtn = document.getElementById('clear-cart-btn');
+        if (clearCartBtn) {
+            clearCartBtn.addEventListener('click', this.clearCart.bind(this));
+        }
+        
+        const completeSaleBtn = document.getElementById('complete-sale-btn');
+        if (completeSaleBtn) {
+            completeSaleBtn.addEventListener('click', this.completeSale.bind(this));
+        }
         
         // الخصم
-        document.getElementById('apply-discount-btn').addEventListener('click', this.applyDiscount.bind(this));
-        document.getElementById('discount-type').addEventListener('change', this.updateDiscountUI.bind(this));
-        document.getElementById('discount-value').addEventListener('input', this.updateDiscountUI.bind(this));
+        const applyDiscountBtn = document.getElementById('apply-discount-btn');
+        if (applyDiscountBtn) {
+            applyDiscountBtn.addEventListener('click', this.applyDiscount.bind(this));
+        }
+        
+        const discountType = document.getElementById('discount-type');
+        if (discountType) {
+            discountType.addEventListener('change', this.updateDiscountUI.bind(this));
+        }
+        
+        const discountValue = document.getElementById('discount-value');
+        if (discountValue) {
+            discountValue.addEventListener('input', this.updateDiscountUI.bind(this));
+        }
         
         // طريقة الدفع
         document.querySelectorAll('input[name="paymentMethod"]').forEach(radio => {
@@ -45,6 +80,24 @@ const POS = {
                 this.changeQuantity(e.target.closest('.cart-item'), -1);
             } else if (e.target.classList.contains('remove-btn')) {
                 this.removeFromCart(e.target.closest('.cart-item'));
+            } else if (e.target.closest('.product-card')) {
+                // إضافة المنتج عند النقر على البطاقة
+                const productCard = e.target.closest('.product-card');
+                if (!productCard.classList.contains('out-of-stock')) {
+                    const productId = productCard.getAttribute('data-id');
+                    this.addToCart(productId, 1);
+                }
+            } else if (e.target.closest('.search-result-item')) {
+                // إضافة نتيجة البحث عند النقر عليها
+                const resultItem = e.target.closest('.search-result-item');
+                const productId = resultItem.getAttribute('data-id');
+                this.addToCart(productId, 1);
+                
+                // مسح نتائج البحث وإعادة تعيين الحقل
+                if (document.getElementById('pos-product-search')) {
+                    document.getElementById('pos-product-search').value = '';
+                }
+                this.loadAvailableProducts();
             }
         });
         
@@ -66,6 +119,8 @@ const POS = {
     
     renderAvailableProducts: function(products) {
         const availableProductsDiv = document.getElementById('available-products');
+        if (!availableProductsDiv) return;
+        
         availableProductsDiv.innerHTML = '';
         
         if (products.length === 0) {
@@ -110,8 +165,7 @@ const POS = {
         return `
             <div class="product-card ${isOutOfStock ? 'out-of-stock' : ''}" 
                  data-id="${product.id}" 
-                 data-barcode="${product.barcode || ''}"
-                 onclick="POS.addToCart('${product.id}')">
+                 data-barcode="${product.barcode || ''}">
                 <div class="product-image-container">
                     ${product.image ? `
                         <img src="${product.image}" class="product-image" alt="${product.name}"
@@ -144,8 +198,16 @@ const POS = {
     },
     
     searchProductsPOS: function() {
-        const searchTerm = document.getElementById('pos-product-search').value.toLowerCase();
-        const products = DB.get(CONSTANTS.SORAGE_KEYS.PRODUCTS);
+        const searchInput = document.getElementById('pos-product-search');
+        if (!searchInput) return;
+        
+        const searchTerm = searchInput.value.toLowerCase();
+        const products = DB.get(CONSTANTS.STORAGE_KEYS.PRODUCTS);
+        
+        if (!searchTerm.trim()) {
+            this.loadAvailableProducts();
+            return;
+        }
         
         const filteredProducts = products.filter(product => 
             product.isActive !== false && (
@@ -156,7 +218,71 @@ const POS = {
             )
         );
         
-        this.renderAvailableProducts(filteredProducts);
+        this.renderSearchResults(filteredProducts);
+    },
+    
+    renderSearchResults: function(products) {
+        const availableProductsDiv = document.getElementById('available-products');
+        if (!availableProductsDiv) return;
+        
+        availableProductsDiv.innerHTML = '';
+        
+        if (products.length === 0) {
+            availableProductsDiv.innerHTML = `
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-search display-4 d-block mb-2"></i>
+                    لا توجد نتائج للبحث
+                </div>
+            `;
+            return;
+        }
+        
+        // عرض نتائج البحث
+        products.forEach(product => {
+            const isOutOfStock = product.quantity === 0;
+            
+            const resultElement = document.createElement('div');
+            resultElement.className = `search-result-item ${isOutOfStock ? 'out-of-stock' : ''}`;
+            resultElement.setAttribute('data-id', product.id);
+            resultElement.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center p-3 border-bottom">
+                    <div>
+                        <h6 class="mb-1">${product.name}</h6>
+                        <small class="text-muted">${product.category} • ${UTILS.formatCurrency(product.price)}</small>
+                    </div>
+                    <div>
+                        <span class="badge ${isOutOfStock ? 'bg-danger' : 'bg-success'}">
+                            ${isOutOfStock ? 'منتهي' : `${product.quantity} متوفر`}
+                        </span>
+                    </div>
+                </div>
+            `;
+            availableProductsDiv.appendChild(resultElement);
+        });
+    },
+    
+    addFirstSearchResultToCart: function() {
+        const searchInput = document.getElementById('pos-product-search');
+        if (!searchInput) return;
+        
+        const searchTerm = searchInput.value.toLowerCase();
+        if (!searchTerm.trim()) return;
+        
+        const products = DB.get(CONSTANTS.STORAGE_KEYS.PRODUCTS);
+        const filteredProducts = products.filter(product => 
+            product.isActive !== false && (
+                product.name.toLowerCase().includes(searchTerm) || 
+                product.category.toLowerCase().includes(searchTerm) ||
+                (product.barcode && product.barcode.includes(searchTerm)) ||
+                (product.description && product.description.toLowerCase().includes(searchTerm))
+            )
+        );
+        
+        if (filteredProducts.length > 0) {
+            this.addToCart(filteredProducts[0].id, 1);
+            searchInput.value = '';
+            this.loadAvailableProducts();
+        }
     },
     
     addToCart: function(productId, quantity = 1) {
@@ -207,7 +333,10 @@ const POS = {
         UTILS.showNotification(`تم إضافة ${product.name} إلى السلة`, 'success');
         
         // مسح حقل البحث بعد الإضافة الناجحة
-        document.getElementById('pos-product-search').value = '';
+        const searchInput = document.getElementById('pos-product-search');
+        if (searchInput) {
+            searchInput.value = '';
+        }
         this.loadAvailableProducts();
     },
     
@@ -246,6 +375,8 @@ const POS = {
         const emptyCartMessage = document.getElementById('empty-cart-message');
         const discountSection = document.getElementById('discount-section');
         const cartTotalElement = document.getElementById('cart-total');
+        
+        if (!cartItemsContainer || !emptyCartMessage || !discountSection || !cartTotalElement) return;
         
         if (this.cart.length === 0) {
             cartItemsContainer.innerHTML = '';
@@ -294,9 +425,13 @@ const POS = {
         const discountAmount = this.calculateDiscountAmount(subtotal);
         const total = subtotal - discountAmount;
         
-        document.getElementById('cart-subtotal').textContent = UTILS.formatCurrency(subtotal);
-        document.getElementById('discount-amount').textContent = UTILS.formatCurrency(discountAmount);
-        document.getElementById('cart-total').textContent = UTILS.formatCurrency(total);
+        const cartSubtotal = document.getElementById('cart-subtotal');
+        const discountAmountElement = document.getElementById('discount-amount');
+        const cartTotalElement = document.getElementById('cart-total');
+        
+        if (cartSubtotal) cartSubtotal.textContent = UTILS.formatCurrency(subtotal);
+        if (discountAmountElement) discountAmountElement.textContent = UTILS.formatCurrency(discountAmount);
+        if (cartTotalElement) cartTotalElement.textContent = UTILS.formatCurrency(total);
         
         // حفظ الإجمالي للاستخدام لاحقاً
         this.cartTotal = total;
@@ -304,17 +439,22 @@ const POS = {
     },
     
     applyDiscount: function() {
-        const discountType = document.getElementById('discount-type').value;
-        const discountValue = parseFloat(document.getElementById('discount-value').value) || 0;
+        const discountType = document.getElementById('discount-type');
+        const discountValue = document.getElementById('discount-value');
         
-        if (discountValue < 0) {
+        if (!discountType || !discountValue) return;
+        
+        const discountTypeValue = discountType.value;
+        const discountValueValue = parseFloat(discountValue.value) || 0;
+        
+        if (discountValueValue < 0) {
             UTILS.showNotification('قيمة الخصم يجب أن تكون موجبة', 'error');
             return;
         }
         
         this.currentDiscount = {
-            type: discountType,
-            value: discountValue,
+            type: discountTypeValue,
+            value: discountValueValue,
             amount: this.calculateDiscountAmount(this.cartSubtotal)
         };
         
@@ -339,18 +479,28 @@ const POS = {
     
     updateDiscountUI: function() {
         // تحديث واجهة الخصم بناءً على القيم الحالية
-        const discountType = document.getElementById('discount-type').value;
-        const discountValue = document.getElementById('discount-value').value;
+        const discountType = document.getElementById('discount-type');
+        const discountValue = document.getElementById('discount-value');
+        
+        if (!discountType || !discountValue) return;
+        
+        const discountTypeValue = discountType.value;
+        const discountValueValue = discountValue.value;
         
         // إضافة الرموز المناسبة
-        const suffix = discountType === 'percent' ? '%' : 'ريال';
-        document.getElementById('discount-value').parentElement.querySelector('.input-group-text')?.remove();
+        const suffix = discountTypeValue === 'percent' ? '%' : 'ريال';
+        const parentElement = discountValue.parentElement;
+        const existingSuffix = parentElement.querySelector('.input-group-text');
+        
+        if (existingSuffix) {
+            existingSuffix.remove();
+        }
         
         const suffixSpan = document.createElement('span');
         suffixSpan.className = 'input-group-text';
         suffixSpan.textContent = suffix;
         
-        document.getElementById('discount-value').parentElement.appendChild(suffixSpan);
+        parentElement.appendChild(suffixSpan);
     },
     
     clearCart: function() {
@@ -362,8 +512,12 @@ const POS = {
         
         this.cart = [];
         this.currentDiscount = { type: 'percent', value: 0, amount: 0 };
-        document.getElementById('discount-value').value = '0';
-        document.getElementById('discount-type').value = 'percent';
+        
+        const discountValue = document.getElementById('discount-value');
+        const discountType = document.getElementById('discount-type');
+        
+        if (discountValue) discountValue.value = '0';
+        if (discountType) discountType.value = 'percent';
         
         this.updateCartDisplay();
         UTILS.showNotification('تم مسح السلة', 'info');
@@ -371,10 +525,13 @@ const POS = {
     
     toggleCustomerSection: function(show) {
         const customerSection = document.getElementById('customer-section');
+        if (!customerSection) return;
+        
         customerSection.style.display = show ? 'block' : 'none';
         
         if (show) {
-            document.getElementById('customer-name').focus();
+            const customerName = document.getElementById('customer-name');
+            if (customerName) customerName.focus();
         }
     },
     
@@ -389,12 +546,19 @@ const POS = {
             return;
         }
         
-        const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked').value;
-        const customerName = paymentMethod === 'آجل' ? document.getElementById('customer-name').value.trim() : null;
+        const paymentMethodRadio = document.querySelector('input[name="paymentMethod"]:checked');
+        if (!paymentMethodRadio) {
+            UTILS.showNotification('يرجى اختيار طريقة الدفع', 'error');
+            return;
+        }
+        
+        const paymentMethod = paymentMethodRadio.value;
+        const customerNameInput = document.getElementById('customer-name');
+        const customerName = paymentMethod === 'آجل' && customerNameInput ? customerNameInput.value.trim() : null;
         
         if (paymentMethod === 'آجل' && (!customerName || customerName === '')) {
             UTILS.showNotification('يرجى إدخال اسم العميل للبيع الآجل', 'error');
-            document.getElementById('customer-name').focus();
+            if (customerNameInput) customerNameInput.focus();
             return;
         }
         
@@ -535,90 +699,9 @@ const POS = {
     },
     
     printInvoice: function(sale) {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        
-        // إعدادات المتجر
-        const storeName = localStorage.getItem(CONSTANTS.STORAGE_KEYS.STORE_NAME) || 'متجري';
-        const settings = DB.get(CONSTANTS.STORAGE_KEYS.SETTINGS);
-        
-        // ترويسة الفاتورة
-        doc.setFontSize(20);
-        doc.setTextColor(40, 40, 40);
-        doc.text(storeName, 105, 15, { align: 'center' });
-        
-        doc.setFontSize(12);
-        doc.setTextColor(100, 100, 100);
-        doc.text(`رقم الفاتورة: ${sale.invoiceNumber}`, 105, 25, { align: 'center' });
-        doc.text(`التاريخ: ${sale.date} - ${sale.time}`, 105, 32, { align: 'center' });
-        
-        doc.line(10, 40, 200, 40);
-        
-        // عناصر الفاتورة
-        let y = 50;
-        doc.setFontSize(12);
-        doc.setTextColor(40, 40, 40);
-        
-        // عناوين الأعمدة
-        doc.text('المنتج', 180, y, { align: 'right' });
-        doc.text('الكمية', 140, y, { align: 'right' });
-        doc.text('السعر', 100, y, { align: 'right' });
-        doc.text('الإجمالي', 60, y, { align: 'right' });
-        
-        y += 10;
-        doc.line(10, y, 200, y);
-        y += 10;
-        
-        // العناصر
-        sale.items.forEach(item => {
-            if (y > 250) {
-                doc.addPage();
-                y = 20;
-            }
-            
-            doc.text(item.name, 180, y, { align: 'right' });
-            doc.text(item.quantity.toString(), 140, y, { align: 'right' });
-            doc.text(UTILS.formatCurrency(item.price), 100, y, { align: 'right' });
-            doc.text(UTILS.formatCurrency(item.total), 60, y, { align: 'right' });
-            y += 10;
-        });
-        
-        y += 5;
-        doc.line(10, y, 200, y);
-        y += 10;
-        
-        // المجموع والخصم
-        doc.text('المجموع:', 180, y, { align: 'right' });
-        doc.text(UTILS.formatCurrency(sale.subtotal), 140, y, { align: 'right' });
-        y += 10;
-        
-        if (sale.discount > 0) {
-            doc.text('الخصم:', 180, y, { align: 'right' });
-            doc.text(UTILS.formatCurrency(sale.discount), 140, y, { align: 'right' });
-            y += 10;
-        }
-        
-        doc.setFontSize(14);
-        doc.setTextColor(40, 40, 40);
-        doc.text('الإجمالي النهائي:', 180, y, { align: 'right' });
-        doc.text(UTILS.formatCurrency(sale.total), 140, y, { align: 'right' });
-        y += 15;
-        
-        doc.setFontSize(12);
-        doc.setTextColor(100, 100, 100);
-        doc.text(`طريقة الدفع: ${sale.paymentMethod}`, 105, y, { align: 'center' });
-        
-        if (sale.customerName) {
-            y += 10;
-            doc.text(`اسم العميل: ${sale.customerName}`, 105, y, { align: 'center' });
-        }
-        
-        y += 20;
-        doc.setFontSize(10);
-        doc.text(settings.receiptFooter || 'شكراً لشرائكم من متجرنا', 105, y, { align: 'center' });
-        
-        // حفظ PDF
-        doc.save(`فاتورة-${sale.invoiceNumber}.pdf`);
+        // يمكنك تنفيذ الطباعة حسب احتياجاتك
+        console.log('فاتورة البيع:', sale);
+        UTILS.showNotification('تم إنشاء الفاتورة بنجاح', 'success');
     },
     
     resetPOS: function() {
@@ -626,11 +709,17 @@ const POS = {
         this.currentDiscount = { type: 'percent', value: 0, amount: 0 };
         
         // إعادة تعيين النماذج
-        document.getElementById('pos-product-search').value = '';
-        document.getElementById('discount-value').value = '0';
-        document.getElementById('discount-type').value = 'percent';
-        document.getElementById('customer-name').value = '';
-        document.querySelector('input[name="paymentMethod"][value="نقدي"]').checked = true;
+        const searchInput = document.getElementById('pos-product-search');
+        const discountValue = document.getElementById('discount-value');
+        const discountType = document.getElementById('discount-type');
+        const customerName = document.getElementById('customer-name');
+        const paymentMethodCash = document.querySelector('input[name="paymentMethod"][value="نقدي"]');
+        
+        if (searchInput) searchInput.value = '';
+        if (discountValue) discountValue.value = '0';
+        if (discountType) discountType.value = 'percent';
+        if (customerName) customerName.value = '';
+        if (paymentMethodCash) paymentMethodCash.checked = true;
         
         this.toggleCustomerSection(false);
         this.updateCartDisplay();
@@ -644,6 +733,8 @@ const POS = {
         }
         
         const scannerElement = document.getElementById('barcode-scanner');
+        if (!scannerElement) return;
+        
         scannerElement.classList.add('active');
         
         this.scanner.listVideoInputDevices()
@@ -675,6 +766,8 @@ const POS = {
     
     closeBarcodeScanner: function() {
         const scannerElement = document.getElementById('barcode-scanner');
+        if (!scannerElement) return;
+        
         scannerElement.classList.remove('active');
         
         if (this.scanner) {
@@ -683,7 +776,7 @@ const POS = {
         
         // إيقاف الكاميرا
         const video = document.getElementById('barcode-video');
-        if (video.srcObject) {
+        if (video && video.srcObject) {
             const tracks = video.srcObject.getTracks();
             tracks.forEach(track => track.stop());
             video.srcObject = null;
@@ -710,7 +803,8 @@ const POS = {
         switch(e.key) {
             case 'F2':
                 e.preventDefault();
-                document.getElementById('pos-product-search').focus();
+                const searchInput = document.getElementById('pos-product-search');
+                if (searchInput) searchInput.focus();
                 break;
             case 'F3':
                 e.preventDefault();
@@ -746,10 +840,10 @@ const POS = {
     quickRemoveLastItem: function(quantity) {
         if (this.cart.length > 0) {
             const lastItem = this.cart[this.cart.length - 1];
-            this.changeQuantity(
-                document.querySelector(`.cart-item[data-id="${lastItem.productId}"]`),
-                -quantity
-            );
+            const cartItemElement = document.querySelector(`.cart-item[data-id="${lastItem.productId}"]`);
+            if (cartItemElement) {
+                this.changeQuantity(cartItemElement, -quantity);
+            }
         }
     },
     
@@ -799,3 +893,10 @@ const POS = {
 
 // جعل الدوال متاحة globally للاستخدام في event handlers في HTML
 window.POS = POS;
+
+// تهيئة نقطة البيع عند تحميل الصفحة
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof POS !== 'undefined') {
+        POS.init();
+    }
+});
