@@ -1,4 +1,15 @@
 // إدارة المبيعات
+init: function() {
+    // تأكد من تهيئة قاعدة البيانات أولاً
+    if (typeof DB !== 'undefined' && typeof DB.init === 'function') {
+        DB.init();
+    }
+    
+    this.setupEventHandlers();
+    this.loadProducts();
+    this.loadSuppliersDropdown();
+}
+
 const SALES = {
     viewSale: function(invoiceNumber) {
         const sales = DB.get(CONSTANTS.STORAGE_KEYS.SALES);
