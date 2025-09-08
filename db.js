@@ -2,8 +2,8 @@
 
 class StoreManagementDB {
     constructor() {
-        this.dbName = 'StoreManagementDB';
-        this.version = 1;
+        this.dbName = 'sales1';
+        this.version = 4;
         this.db = null;
     }
 
